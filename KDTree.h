@@ -3,9 +3,13 @@
 
 #include "KDNode.h"
 #include "rect.h"
+#include "KDDisk.h"
+#include "KDPointDisk.h"
+#include "KDTreeDiskHeader.h"
 
 #include <vector>
 #include <utility>
+#include <stdint.h>
 
 using std::vector;
 using std::pair;
@@ -18,12 +22,26 @@ using std::pair;
 class KDTree{
 
 private:
-	
+
+	static int32_t	m_B;			// the size the disk page in bytes. 
+	static int32_t	m_xBitWidth;	// the bitwise width of x point.
+	static int32_t	m_yBitWidth;	// the bitwise width of y point.
+
+	static int32_t	m_splitValueBitWidth;	// the bitwise width of a split value.
+	static int32_t	m_numPoint;				// the number of points that can be store in a diks page.
+
 	KDNode*			m_root;		//KD-树的跟节点
+	Rect 			m_rect;		//KD-tree's Bounding Box.
+
+	KDTreeDiskHeader	m_header;
 
 public:
+	//构造函数
+	KDTree(vector<uint64_t>& vx, vector<uint64_t>& vy);  
 
-	KDTree(vector<int>& vx, vector<int>& vy);  //构造函数
+	//析构函数
+	~KDTree();
+	void removeTree(KDNode* root);
 
 	/*****
 	*范围查找：
@@ -39,7 +57,6 @@ public:
 	*	@param px  x轴的范围是[px.first, px.second]
 	*   @param py  y轴的范围是[py.first, py.second]
 	***/
-
 	int count(pair<int, int>& px, pair<int, int>& py);
 
 	
@@ -52,9 +69,11 @@ public:
 	* Note: 点集是(vx[i], vy[i]),for range.first <= i <= range.second
 	* @param depth   If depth is odd, the split is x, if the depth is even, the split is y
 	***/
-	KDNode* construct(vector<int>& vx, vector<int>& vy,
-					pair<int, int> range,
-					int depth);
+	KDNode* construct(vector<uint64_t>& vx, 
+					vector<uint64_t>& vy,
+					pair<uint64_t, uint64_t> range,
+					int32_t depth,
+					Rect r);
 
 	/*****
 	* Description: Get the index of the median in vector v[range.first, rane.second]
@@ -71,18 +90,18 @@ public:
 	*			parts. The value in the v[range.first, i] is less than or equal to the median x.
 	*			The value in the v[i+1, range.second] is larger than the median x.
 	*****/
-	int getMedian(vector<int>& vx, vector<int>& vy, pair<int, int> range, int depth);
+	uint64_t getMedian(vector<uint64_t>& vx, vector<uint64_t>& vy, pair<uint64_t, uint64_t> range, int32_t depth);
 	
 
 	// There are many methods to get the median.
 	// So realize them.
-	int partition(vector<int>& vx, vector<int>& vy, pair<int, int>range, int depth);
+	uint64_t partition(vector<uint64_t>& vx, vector<uint64_t>& vy, pair<uint64_t, uint64_t>range, int32_t depth);
 
 	/****
 	* @param kth  The value of kth is in the range[1 .. range.second-range.first+1]
 	* @return the index in the range, that the range is the kth smallest value.
 	****/
-	int quickSelect(vector<int>& vx, vector<int>& vy, pair<int, int>range, int depth, int kth);
+	uint64_t quickSelect(vector<uint64_t>& vx, vector<uint64_t>& vy, pair<uint64_t, uint64_t>range, int32_t depth, uint64_t kth);
 
 
 	void locate(Rect& qrect, 
@@ -91,21 +110,30 @@ public:
 				int depth, 
 				vector<pair<int, int> >* result);
 
-	void locateAllChild(KDNode* root, vector<pair<int, int> >* result);   //访问以给定节点为根的所有孩子节点。
+	//访问以给定节点为根的所有孩子节点。
+	void locateAllChild(KDNode* root, vector<pair<int, int> >* result);   
 
 	bool isInRange(pair<int, int>& px, pair<int, int>& py, int x, int y);
 
 	
 	// 建立好KD-树之后将 KD-数存储到磁盘上。
+	void SaveToDisk(char* name);	
 	
+	int32_t SaveNodeToDisk(KDNode* root, DiskFile* diskOut);
+
+	int32_t writeHeader(DiskFile& df);
+
+	// 将磁盘上的KDTree加载进内存，恢复成内存中的KDTree
+	void LoadFromDisk(char* name);
+
+	/**在调用KDTree的构造函数之前，调用这个函数**************
+	* @param B			: The size of disk page in bytes. 
+	* @param xBitWidth	: The bitwise width of a x point value
+	* @param yBitWidth  : The bitwise width of a y point value
+	**********************************************************/
+	static void Set(int32_t B, int32_t xBitWidth, int32_t yBitWidth);
 
 };
-
-
-
-
-
-
 
 
 

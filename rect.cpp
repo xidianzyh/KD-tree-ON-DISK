@@ -5,7 +5,7 @@ using std::min;
 using std::max;
 
 // 构造函数
-Rect::Rect(int lx, int hx, int ly, int hy, bool blx, bool bhx, bool bly, bool bhy) {
+Rect::Rect(uint64_t lx, uint64_t hx, uint64_t ly, uint64_t hy, bool blx, bool bhx, bool bly, bool bhy) {
 	m_lx = lx;
 	m_hx = hx;
 	m_ly = ly;
@@ -16,8 +16,14 @@ Rect::Rect(int lx, int hx, int ly, int hy, bool blx, bool bhx, bool bly, bool bh
 	b_hy = bhy;
 }
 
+//Default Constructor!!
+Rect::Rect(){
+	m_lx = m_hx = m_ly = m_hy = 0;
+	b_lx = b_hx = b_ly = b_hy = false;
+}
+
 // 判断一个点是否在这个矩形中。
-bool Rect::isInRange(int x, int y) const {
+bool Rect::isInRange(uint64_t x, uint64_t y) const {
 	if( (m_lx < x && x < m_hx) || (b_lx == true && m_lx == x)  || (b_hx == true && m_hx == x)){
 	
 		if((m_ly < y && y < m_hy) || (b_ly == true && m_ly == y) || (b_hy == true && m_hy == y))
@@ -90,10 +96,34 @@ bool Rect::isContained(const Rect& r) const {
 		return false;
 
 	return true;
-
 }
 
+int32_t Rect::writeToDisk(FILE* out){
 
+	int32_t totalBytes = 0;
+	totalBytes += fwrite(&m_lx, 1, sizeof(uint64_t), out);
+	totalBytes += fwrite(&m_hx, 1, sizeof(uint64_t), out);
+	totalBytes += fwrite(&m_ly, 1, sizeof(uint64_t), out);
+	totalBytes += fwrite(&m_hy, 1, sizeof(uint64_t), out);
+
+	uint8_t tmp  = 0;
+	if(b_lx == true)
+		tmp |= 0x1;
+	if(b_hx == true)
+		tmp |= 0x2;
+	if(b_ly == true)
+		tmp |= 0x4;
+	if(b_hy |= true)
+		tmp |= 0x8;
+
+	totalBytes += fwrite(&tmp, 1, sizeof(uint8_t), out);
+	return totalBytes;
+}
+
+int32_t Rect::BytesInDisk(){
+
+	return (8 + 8 + 8 + 8 + 1);  // 33 bytes.
+}
 
 
 

@@ -11,43 +11,50 @@
 
 using namespace std;
 
+void Set(int32_t B, int32_t xBitWidth, int32_t yBitWidth) {
+	KDTree::Set(B, xBitWidth, yBitWidth);
+}
+
 void test();
 void test_quickSort();
 void test_nth();
 
 int main() {
 	
-	test_nth();
+	//test_nth();
 	//test_quickSort();
-	//test();
+	test();
 }
 
 void test() {
 
-	clock_t build_time, locate_time;
+	Set(1024*32, 32, 32);
 
-	vector<int> vx, vy;
+	clock_t build_time = 0, locate_time = 0;
 
-	for(int i = 1; i< 10000; i++){
+	vector<uint64_t> vx, vy;
+
+	for(int i = 1; i< 25*1024*1024; i++){
 		vx.push_back(i);
 		vy.push_back(i);
 	}
 
-	build_time = clock();  // measure time
+	build_time = std::clock();  // measure time
 	KDTree tree(vx, vy);
-	build_time = clock() - build_time;
+	tree.SaveToDisk("tmp.kdt");
+	build_time = std::clock() - build_time;
 
 	pair<int, int> px = make_pair(0, 6200);
 	pair<int, int> py = make_pair(0, 6000);
 
 	/**为什么测试locate的时间很少? 经常就是0，但是结果是正确的**/
-	locate_time = clock();
-	vector<pair<int, int> >* result = tree.locate(px, py);
-	locate_time = clock() - locate_time;
+	// locate_time = clock();
+	// vector<pair<int, int> >* result = tree.locate(px, py);
+	// locate_time = clock() - locate_time;
 
-	for(vector<pair<int, int> >::iterator it = result->begin(); it != result->end(); it++){
-		//cout << "(" << (it->first) << ", " << (it->second) << ")" << endl;
-	}
+	// for(vector<pair<int, int> >::iterator it = result->begin(); it != result->end(); it++){
+	// 	//cout << "(" << (it->first) << ", " << (it->second) << ")" << endl;
+	// }
 
 	cout << "build_time = " << ((double)build_time) / CLOCKS_PER_SEC << endl;
 	cout << "locate_time = " << ((double)locate_time) / CLOCKS_PER_SEC << ", clocks = " 
@@ -73,9 +80,9 @@ void test_quickSort(){
 
 	std::random_shuffle(v.begin(), v.end());
 	
-	time = clock();
+	time = std::clock();
 	std::sort(v.begin(), v.end());
-	time = clock() - time;
+	time = std::clock() - time;
 
 	cout << ((double)time) / CLOCKS_PER_SEC  << endl;
 }
@@ -98,9 +105,9 @@ void test_nth(){
 	std::random_shuffle(v.begin(), v.end());
 	k = (1+n)/2;
 
-	time = clock();
+	time = std::clock();
 	std::nth_element(v.begin(), v.begin() + k, v.end());
-	time = clock()-time;
+	time = std::clock()-time;
 	cout <<"nth_element() time = " << ((double)time) / CLOCKS_PER_SEC << endl;
 }
 

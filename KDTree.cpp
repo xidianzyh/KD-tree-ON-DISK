@@ -4,52 +4,124 @@
 #include <limits>
 #include <utility>
 #include <cstddef>
+#include <queue>
+#include <algorithm>	//max
+#include <cstdio>
 
-KDTree::KDTree(vector<int>& vx, vector<int>& vy){
+using namespace std;
 
+int32_t KDTree::m_B = -1;
+int32_t KDTree::m_xBitWidth	= -1;
+int32_t KDTree::m_yBitWidth = -1;
+int32_t KDTree::m_splitValueBitWidth = -1;
+int32_t KDTree::m_numPoint = -1;
+
+void KDTree::Set(int32_t B, int32_t xBitWidth, int32_t yBitWidth){
+	m_B = B;
+	m_xBitWidth = xBitWidth;
+	m_yBitWidth = yBitWidth;
+	m_splitValueBitWidth = std::max(m_xBitWidth, m_yBitWidth);
+
+	//调用KDPointDisk的静态函数，进行全局设置。
+	KDPointDisk::Set(B, xBitWidth, yBitWidth);
+	KDDisk::Set(B, m_splitValueBitWidth);
+	//一个disk page中最多可以存储的点的个数。
+	m_numPoint = KDPointDisk::GetMaxPoint();  
+}
+
+//析构函数
+KDTree::~KDTree(){
+	//递归调用删除整颗树在内存中的节点。
+	removeTree(m_root);
+}
+
+void KDTree::removeTree(KDNode* root){
+	if(root == NULL)
+		return;
+	if(root->getLeftChild() != NULL)
+		removeTree(root->getLeftChild());
+	if(root->getRightChild() != NULL)
+		removeTree(root->getRightChild());
+	
+	delete root;
+}
+
+KDTree::KDTree(vector<uint64_t>& vx, vector<uint64_t>& vy){
 	assert(vx.size() == vy.size());
-	if(vx.size() == 0) {  // There is no element in the vector.
+	if(0 == vx.size()) {  // There is no element in the vector.
 		m_root = NULL;  // NULL defined in file <cstddef>
 		return;
 	}
 
+	//寻找vx，vy中的最大值和最小值，来构造整个KDTree的Rect.
+	int64_t n = vx.size();
+	uint64_t xmin, xmax, ymin, ymax;
+	xmin = xmax = vx[0];
+	ymin = ymax = vy[0];
+	for(int64_t i = 0; i < n; i++){
+		if(vx[i] < xmin)
+			xmin = vx[i];
+		if(vx[i] > xmax)
+			xmax = vx[i];
+		if(vy[i] < ymin)
+			ymin = vy[i];
+		if(vy[i] > ymax)
+			ymax = vy[i];
+	}
+	
+	Rect r(xmin, xmax, ymin, ymax);
+	m_rect = r;
 	//Construct the KDTree recursively
-	pair<int, int> range;
-	int depth = 1;
+	int32_t depth = 1;
+	pair<uint64_t, uint64_t> range;
 	range.first = 0;
 	range.second = vx.size() - 1;
-
-	m_root = construct(vx, vy, range, depth);
+	
+	m_root = construct(vx, vy, range, depth, r);
 
 }// end of member function KDTree(vector<int>& vx, vector<int>& vy) 
 
 
-KDNode* KDTree::construct(vector<int>& vx, 
-						vector<int>& vy,
-						pair<int, int> range,
-						int depth) {
-
-	if(range.first == range.second) {// there is only one elements in the vector.
-		//If depth is odd, the split is x, or the split is y.
-		bool split = (depth % 2 == 1) ? true : false;
-		KDNode* root = new KDNode(vx[range.first], vy[range.second], split);
-		root->setLeftChild(NULL);
-		root->setRightChild(NULL);
+KDNode* KDTree::construct(vector<uint64_t>& vx, 
+						vector<uint64_t>& vy,
+						pair<uint64_t, uint64_t> range,
+						int32_t depth,
+						Rect r) {
+	
+	//如果点的个数可以存放进一个磁盘块中
+	if(range.second - range.first + 1 <= this->m_numPoint) {
+		//创建一个存放点的block.
+		KDNode* root = new KDNode(vx, vy, range, depth);
 		return root;
 	}
 	
 	// Get the index of the median number
-	int median = getMedian(vx, vy, range, depth);
-	bool split = (depth % 2 == 1) ? true : false;
-	KDNode* root = new KDNode(vx[median], vy[median], split);
+	uint64_t median = getMedian(vx, vy, range, depth);
+	KDNode* root = new KDNode(vx[median], vy[median], depth, r);
 	
-	// divide the vector into two parts.
+	// getMedian will  divide the vector into two parts.
 	
 	// recursivelyl invoke the construct() function
-	pair<int, int> rangeLeft = std::make_pair(range.first, median);
-	pair<int, int> rangeRight = std::make_pair(median + 1, range.second);
-	KDNode* leftChild = construct(vx, vy, rangeLeft, depth + 1);
-	KDNode* rightChild = construct(vx, vy, rangeRight, depth + 1);
+	pair<uint64_t, uint64_t> rangeLeft = std::make_pair(range.first, median);
+	pair<uint64_t, uint64_t> rangeRight = std::make_pair(median + 1, range.second);
+	
+	Rect rLeft 	= r;
+	Rect rRight	= r;
+	
+	if(depth % 2 == 1) {
+		rLeft.m_hx = median;
+		rLeft.b_hx = true;
+		rRight.m_lx = median;
+		rRight.b_lx = false;
+	} else {
+		rLeft.m_hy = median;
+		rLeft.b_hy = true;
+		rRight.m_ly = median;
+		rRight.b_ly = false;
+	}
+
+	KDNode* leftChild = construct(vx, vy, rangeLeft, depth + 1, rLeft);
+	KDNode* rightChild = construct(vx, vy, rangeRight, depth + 1, rRight);
 
 	// set it's left and right child
 	root->setLeftChild(leftChild);
@@ -59,19 +131,22 @@ KDNode* KDTree::construct(vector<int>& vx,
 
 }// end of member function construct()
 
-int KDTree::getMedian(vector<int>& vx, vector<int>& vy, pair<int, int>range, int depth){
+uint64_t KDTree::getMedian(vector<uint64_t>& vx, 
+						vector<uint64_t>& vy, 
+						pair<uint64_t, uint64_t>range, 
+						int32_t depth){
 	// Get the median, and split the vector vx[range.first, range.second], vy[range.first, range.second]
 	//into vx[range.first, i] and vx[i+1, range.second]
 	//     vy[range.first, i] and vy[i+1, range.second]
-	int kth = (range.second - range.first + 1 + 1) / 2;
-	int idx = quickSelect(vx, vy, range, depth, kth);
+	uint64_t kth = (range.second - range.first + 1 + 1) / 2;
+	uint64_t idx = quickSelect(vx, vy, range, depth, kth);
 	
 	//TODO:
-	vector<int>& v =vx;
+	vector<uint64_t>& v =vx;
 	if(depth % 2 == 0) v = vy;
 	
 	//处理相等元素，使得和分裂值相等的元素位于一个节点上。
-	int i = idx;
+	uint64_t i = idx;
 	++i;
 	while(i <= range.second && v[i] == v[idx]) ++i;
 	return --i;
@@ -88,14 +163,16 @@ int KDTree::getMedian(vector<int>& vx, vector<int>& vy, pair<int, int>range, int
 * 同时位于两个孩子中。
 ******/
 
-int KDTree::quickSelect(vector<int>& vx, vector<int>& vy,
-					pair<int, int>range, 
-					int depth, 
-					int kth) {
+uint64_t KDTree::quickSelect(vector<uint64_t>& vx, 
+							vector<uint64_t>& vy,
+							pair<uint64_t, uint64_t>range, 
+							int32_t depth, 
+							uint64_t kth) {
+
 	assert(kth >= 1 && kth <= (range.second - range.first + 1));
 	
-	int div = partition(vx,vy, range, depth);  //分割符的index; range.first <= div <= range.second
-	int xth = (div - range.first + 1);			//分割符的 rank.
+	uint64_t div = partition(vx,vy, range, depth);  //分割符的index; range.first <= div <= range.second
+	uint64_t xth = (div - range.first + 1);			//分割符的 rank.
 
 	if(xth < kth) {
 		kth -= xth;					// update the value of kth
@@ -121,13 +198,14 @@ int KDTree::quickSelect(vector<int>& vx, vector<int>& vy,
 * v[range.first, idx-1] <= v[idx]
 * v[idx] < v[range.idx + 1, v.second]
 **/
-int KDTree::partition(vector<int>& vx, vector<int>& vy, 
-					pair<int, int>range, 
-					int depth) {
+uint64_t KDTree::partition(vector<uint64_t>& vx, 
+						vector<uint64_t>& vy, 
+						pair<uint64_t, uint64_t>range, 
+						int32_t depth) {
 	
-	int left, right, mid, div, idx;
-	vector<int>& v1 = vx;
-	vector<int>& v2 = vy;
+	uint64_t left, right, mid, div, idx;
+	vector<uint64_t>& v1 = vx;
+	vector<uint64_t>& v2 = vy;
 	if(depth % 2 == 0) {
 		v1 = vy;
 		v2 = vx;
@@ -168,7 +246,7 @@ int KDTree::partition(vector<int>& vx, vector<int>& vy,
 	
 	left = mid = right = range.first;
 	//对数组进行一次调整
-	int tmp;
+	uint64_t tmp;
 	/***
 	* 一次完整的划分过程，确保不会出错。
 	* left -----> mid ----> right
@@ -235,7 +313,6 @@ int KDTree::partition(vector<int>& vx, vector<int>& vy,
 
 
 KDNode* KDTree::getRoot(){
-
 	return m_root;
 }
 
@@ -293,8 +370,6 @@ void KDTree::locate(Rect& qrect,
 	Rect lrect = nrect;  //左孩子节点对应的矩形
 	Rect rrect = nrect;	 //右孩子节点对应的矩形
 
-
-	
 	// 设定左右孩子节点对应的矩形。
 	if(depth % 2 == 1) {
 		//split on x
@@ -342,7 +417,7 @@ void KDTree::locate(Rect& qrect,
 void KDTree::locateAllChild(KDNode* root, vector<pair<int, int> >* result){
 	if(root == NULL)
 		return;
-	
+
 	if(root->isLeaf()){
 		//收集叶子节点
 		int x = root->getX();
@@ -357,9 +432,161 @@ void KDTree::locateAllChild(KDNode* root, vector<pair<int, int> >* result){
 }
 
 
+/**将一颗KDTree存储在磁盘上 **
+*
+*@param name :   The file to save.
+*@param B    :   The size of a disk page in bytes.
+*
+*方法如下:
+*1. 构造KDB-tree的时候，如果切分之后的点的个数若是小于B个，就停止划分。
+*2. 按照BFS（Breadth First Search）深度优先的方式访问KDTree。
+*3. 当一个磁盘中可以装入的节点的个数已经满，那么就停止装入节点。
+*4. 对它的每个孩子节点依次如此访问。
+*
+* An internal node consist of:
+* a) The Shape of the kdtree.
+* b) the data in the kdtree node.
+* c) the child pointer of the internal node.
+******************************/
+void KDTree::SaveToDisk(char* name){
+	FILE* out = fopen(name, "w");
+	if(!out){
+		fprintf(stderr, "Open file '%s' error!\n", name);
+		exit(1);
+	}
+	DiskFile df(out, 0);
+	m_header.writeToDisk(&df);
+	int32_t rootNum = SaveNodeToDisk(m_root, &df);
+	int32_t allNum = df.m_diskNum;
+	m_header.set(rootNum, allNum);
+	m_header.writeToDisk(&df);
 
+	fclose(out);
+}
 
+/*****将一个节点为根的树保存到磁盘上
+*@param root	数的根
+*@param out     file descripter
+*@return 		The disk number into which it saves.
+************************************/
+int32_t KDTree::SaveNodeToDisk(KDNode* root, DiskFile* diskOut) {
+	
+	if(NULL == root){
+		assert(false);
+	}
 
+	if(root->isPointNode()) {
+		/**节点保存了点：可以存放在一个磁盘块中**/
+		/*将这个node中的point保存到一个磁盘块中，并且返回磁盘号*/	
+		int64_t nPoint = root->getPointNum();	// the number of points in a node.
+		KDPointDisk pDisk(nPoint);	
+		for(int64_t i = 0; i < nPoint; i++){
+			pair<uint64_t, uint64_t> p = root->getPoint(i);
+			pDisk.setPoint(i, p.first, p.second);
+		}
+		// Save the KDPointDisk into real disk page.
+		int32_t numDisk = pDisk.writeToDisk(diskOut);
+		return numDisk;
+	}
+	
+	/**从这个节点开始层次遍历**/
+	queue<KDNode*> qChild;
+	queue<KDNode*> qParent;
+	queue<KDNode*> qPNode;
+
+	qChild.push(root);
+
+	while(!qChild.empty()){
+
+		KDNode* tmpNode = qChild.front();
+		qChild.pop();
+		if(tmpNode->getLeftChild() != NULL){
+			if(tmpNode->getLeftChild()->isPointNode())
+				qPNode.push(tmpNode->getLeftChild());
+			else
+				qChild.push(tmpNode->getLeftChild());
+		}	
+		if(tmpNode->getRightChild() != NULL){
+			if(tmpNode->getRightChild()->isPointNode())
+				qPNode.push(tmpNode->getRightChild());
+			else
+				qChild.push(tmpNode->getRightChild());
+		}
+		//将这个节点加入这个磁盘页中，并且判断磁盘页的空间。
+		qParent.push(tmpNode);
+		
+		//计算加入下一个节点(the next node)之后，所有节点占用的空间
+		int32_t nc = qChild.size() + qPNode.size() + 1; /*弹出一个节点，最多加入两个孩子节点*/
+		int32_t np = qParent.size() + 1;
+
+		if(KDDisk::OverFlow(np, nc))
+			break;
+	}
+	
+	while(!qChild.empty()){
+		qPNode.push(qChild.front());
+		qChild.pop();
+	}
+	while(!qPNode.empty()){
+		qChild.push(qPNode.front());
+		qPNode.pop();
+	}
+
+	// qParent 保存了层次遍历的所有需要保存的父节点。
+	// qChild  保存了层次遍历所需要的孩子节点。
+	int32_t nc = qChild.size();  //孩子节点.
+	int32_t np = qParent.size(); //父亲节点.
+	
+	int32_t idx = 0;
+	KDDisk disk(root->getRect(), root->getDepth());
+	disk.init(np, nc);
+
+	while(!qParent.empty()){
+		KDNode* tmpNode = qParent.front();  
+		qParent.pop();
+		int32_t shapeNode = 0;
+		if(tmpNode->getLeftChild() != NULL){
+			if(tmpNode->getRightChild() != NULL){
+				shapeNode = 0x3;  //11, two child
+			} else {
+				shapeNode = 0x1;  //01, only left child
+			}
+		} else {
+			if(tmpNode->getRightChild() != NULL)
+				shapeNode = 0x2;  //10; only right child
+			else
+				shapeNode = 0x0;  //00, zero child
+		}
+	//TODO: 向disk中写入树形的值。
+		disk.writeTreeShape(idx, shapeNode);
+
+	//TODO: 向disk中写入节点的value的值。
+		disk.writeSplitValue(idx, tmpNode->getSplitValue());
+
+		idx++;
+	}//end of while()
+
+	idx = 0;
+	/**确定disk中孩子节点的值**/
+	while(!qChild.empty()){
+		KDNode* tmpNode = qChild.front();
+		qChild.pop();
+		int32_t numDisk;
+		numDisk = SaveNodeToDisk(tmpNode, diskOut);
+		//TODO: 将孩子节点的 numDisk 写入disk中。
+		disk.writeChildPointer(idx, numDisk);
+		idx++;
+	}
+	
+	/**TODO: 向disk中写入header，这里需要取得磁盘号的值**/
+	
+
+	/**TODO: 将disk 写入真正的磁盘中**/
+	int32_t numDisk = disk.writeToDisk(diskOut);
+	
+	/**TODO: 返回写入的磁盘号**/
+	return numDisk;
+}
 
 
 
